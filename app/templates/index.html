@@ -809,15 +809,16 @@
     }
 
     // ── KPI card builder ───────────────────────────────────────────────────
-    function buildKpiCard({ icon, label, value, sub, accentClass }) {
+    function buildKpiCard({ icon, label, value, sub, accentClass, kpiKey }) {
+      const keyAttr = kpiKey ? ` data-kpi="${kpiKey}"` : '';
       return `
         <div class="glass rounded-2xl p-5 flex flex-col gap-3 hover:border-indigo-500/30 transition-colors duration-200">
           <div class="flex items-center justify-between">
             <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">${label}</p>
             <div class="w-8 h-8 rounded-lg ${accentClass} flex items-center justify-center text-sm">${icon}</div>
           </div>
-          <p class="text-3xl font-extrabold text-white leading-none">${value}</p>
-          <p class="text-xs text-slate-500">${sub}</p>
+          <p class="text-3xl font-extrabold text-white leading-none"${keyAttr ? ` data-kpi-val="${kpiKey}"` : ''}>${value}</p>
+          <p class="text-xs text-slate-500"${keyAttr ? ` data-kpi-sub="${kpiKey}"` : ''}>${sub}</p>
         </div>`;
     }
 
@@ -846,6 +847,7 @@
             value: `${sb.clean_claim_rate_pct ?? 0}%`,
             sub: `${sb.clean_claims_count ?? 0} clean of ${d.claims_evaluated ?? 0} evaluated`,
             accentClass: 'bg-emerald-500/15 text-emerald-300',
+            kpiKey: 'clean-rate',
           },
           {
             icon: '💵',
@@ -853,6 +855,7 @@
             value: `$${Number(ba.total_billed_usd ?? 0).toLocaleString('en-US')}`,
             sub: `Across ${d.claims_evaluated ?? 0} submitted claims`,
             accentClass: 'bg-indigo-500/15 text-indigo-300',
+            kpiKey: 'total-billed',
           },
           {
             icon: '⚠️',
@@ -860,6 +863,7 @@
             value: `$${Number(ba.at_risk_billed_usd ?? 0).toLocaleString('en-US')}`,
             sub: `${ba.at_risk_pct ?? 0}% of total billed at denial risk`,
             accentClass: 'bg-amber-500/15 text-amber-300',
+            kpiKey: 'at-risk',
           },
           {
             icon: '🏷️',
@@ -867,6 +871,7 @@
             value: topCarcLabel,
             sub: `Triggered ${topCarcCount} time${topCarcCount !== 1 ? 's' : ''} across claims`,
             accentClass: 'bg-red-500/15 text-red-300',
+            kpiKey: 'top-carc',
           },
         ];
 
@@ -882,6 +887,66 @@
         console.error('Metrics load failed:', err);
         showToast('Could not load KPI metrics — is the server running?', 'error');
       }
+    }
+
+    // ── Optimistic KPI updater (used by runLiveScrub) ────────────────────
+    /**
+     * After a single claim is scrubbed successfully, update the four KPI cards
+     * in-place without an extra API round-trip.
+     *
+     * @param {object} result      - API response from POST /claims/scrub
+     * @param {number} billedAmount - The billed_amount that was submitted
+     */
+    function updateKpiFromScrubResult(result, billedAmount) {
+      // ── helpers to read/write the data-kpi-val / data-kpi-sub elements ──
+      const valEl = key => document.querySelector(`[data-kpi-val="${key}"]`);
+      const subEl = key => document.querySelector(`[data-kpi-sub="${key}"]`);
+
+      // Guard: KPI cards may not be rendered yet (still skeleton)
+      if (!valEl('total-billed')) return;
+
+      const billed = Number(billedAmount) || 0;
+
+      // ── 1. Parse current "Total Billed" ──
+      const tbVal = valEl('total-billed');
+      const currentTotalBilled = parseFloat((tbVal.textContent || '').replace(/[^0-9.]/g, '')) || 0;
+      const newTotalBilled = currentTotalBilled + billed;
+      tbVal.textContent = `$${newTotalBilled.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+      // ── 2. Parse current total & clean counts from the "Clean Claim Rate" sub-line ──
+      //    Sub text format: "N clean of M evaluated"
+      const crSub = subEl('clean-rate');
+      const crMatch = (crSub.textContent || '').match(/(\d+)\s+clean\s+of\s+(\d+)/);
+      let cleanCount = crMatch ? parseInt(crMatch[1], 10) : 0;
+      let totalCount = crMatch ? parseInt(crMatch[2], 10) : 0;
+
+      // Increment total for this new claim
+      totalCount += 1;
+      if (result.status === 'CLEAN') cleanCount += 1;
+
+      const newRate = totalCount > 0 ? ((cleanCount / totalCount) * 100).toFixed(1) : '0.0';
+
+      // Update Clean Claim Rate card
+      valEl('clean-rate').textContent = `${newRate}%`;
+      crSub.textContent = `${cleanCount} clean of ${totalCount} evaluated`;
+
+      // Update "Total Billed" sub-line (claim count)
+      subEl('total-billed').textContent = `Across ${totalCount} submitted claims`;
+
+      // ── 3. At-Risk Revenue ──
+      if (result.status === 'FLAGGED' || result.status === 'FATAL_ERROR') {
+        const arVal = valEl('at-risk');
+        const currentAtRisk = parseFloat((arVal.textContent || '').replace(/[^0-9.]/g, '')) || 0;
+        const newAtRisk = currentAtRisk + billed;
+        arVal.textContent = `$${newAtRisk.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+        const atRiskPct = newTotalBilled > 0 ? ((newAtRisk / newTotalBilled) * 100).toFixed(1) : '0.0';
+        subEl('at-risk').textContent = `${atRiskPct}% of total billed at denial risk`;
+      }
+
+      // ── 4. Refresh "Metrics last fetched" timestamp ──
+      document.getElementById('last-refresh').textContent =
+        new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
 
     // ── Batch scrub ────────────────────────────────────────────────────────
@@ -1331,7 +1396,8 @@
           `${result.claim_id} → ${result.status} · Risk ${pct}%`,
           result.status === 'CLEAN' ? 'success' : 'error'
         );
-        await loadMetrics();
+        // Update KPI cards optimistically — no extra API round-trip needed
+        updateKpiFromScrubResult(result, payload.billed_amount);
 
       } catch (err) {
         inner.innerHTML = `
