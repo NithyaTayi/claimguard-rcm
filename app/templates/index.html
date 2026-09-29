@@ -136,6 +136,68 @@
       padding: 1px 8px;
       margin: 1px 2px;
     }
+
+    /* ── Toggle switch ── */
+    .toggle-track {
+      position: relative;
+      width: 42px;
+      height: 24px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 9999px;
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    .toggle-track.active {
+      background: rgba(99,102,241,0.35);
+      border-color: #6366f1;
+    }
+    .toggle-thumb {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      background: #64748b;
+      border-radius: 50%;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+    .toggle-track.active .toggle-thumb {
+      transform: translateX(18px);
+      background: #818cf8;
+    }
+
+    /* ── Live Tester result panel ── */
+    #live-result-panel {
+      transition: opacity 0.3s ease, max-height 0.4s ease;
+      overflow: hidden;
+    }
+    #live-result-panel.collapsed { max-height: 0; opacity: 0; }
+    #live-result-panel.expanded  { max-height: 600px; opacity: 1; }
+
+    /* CPT select styling */
+    .form-select {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 9px 14px;
+      font-size: 0.875rem;
+      color: #e2e8f0;
+      outline: none;
+      appearance: none;
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 16px;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .form-select:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+    .form-select option { background: #0f172a; color: #e2e8f0; }
   </style>
 </head>
 
@@ -281,6 +343,129 @@
         <span id="pill-fatal" class="bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-semibold px-3 py-1 rounded-full"></span>
       </div>
     </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════ -->
+    <!-- INTERACTIVE CLAIM TESTER                                             -->
+    <!-- ══════════════════════════════════════════════════════════════════════ -->
+    <section id="live-tester" class="glass rounded-2xl overflow-hidden animate-fade-in">
+
+      <!-- Card header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700/60">
+        <div class="flex items-center gap-3">
+          <!-- Bolt icon -->
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/15 flex items-center justify-center">
+            <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white">Interactive Claim Tester</h3>
+            <p class="text-xs text-slate-400 mt-0.5">Scrub a single claim live against <code class="bg-slate-800 px-1 rounded text-indigo-300">POST /api/v1/claims/scrub</code></p>
+          </div>
+        </div>
+        <!-- Collapse / expand chevron -->
+        <button id="live-tester-toggle" onclick="toggleLiveTester()"
+          class="text-slate-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-800"
+          title="Collapse tester">
+          <svg id="live-tester-chevron" class="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Form body (collapsible) -->
+      <div id="live-tester-body" class="px-6 py-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+          <!-- Claim ID -->
+          <div>
+            <label for="lt-claim-id" class="form-label">Claim ID</label>
+            <input id="lt-claim-id" type="text" class="form-input" value="CLM-LIVE-901" placeholder="CLM-LIVE-901" />
+          </div>
+
+          <!-- Provider NPI -->
+          <div>
+            <label for="lt-npi" class="form-label">Provider NPI <span class="text-slate-500 font-normal">(10 digits)</span></label>
+            <input id="lt-npi" type="text" class="form-input" value="1234567893" maxlength="10" placeholder="1234567893" />
+          </div>
+
+          <!-- Procedure (CPT) -->
+          <div>
+            <label for="lt-cpt" class="form-label">Procedure (CPT)</label>
+            <select id="lt-cpt" class="form-select">
+              <option value="27447">27447 — Total Knee Arthroplasty</option>
+              <option value="99213">99213 — Established Patient Office Visit</option>
+              <option value="43239">43239 — Upper GI Endoscopy</option>
+              <option value="custom">✎ Enter custom code…</option>
+            </select>
+            <input id="lt-cpt-custom" type="text" class="form-input mt-2 hidden" placeholder="Enter CPT code" />
+          </div>
+
+          <!-- Diagnosis ICD-10 -->
+          <div>
+            <label for="lt-icd" class="form-label">Diagnosis (ICD-10)</label>
+            <input id="lt-icd" type="text" class="form-input" value="M17.11" placeholder="M17.11" />
+            <p class="text-xs text-slate-500 mt-1">Default: M17.11 — Primary Osteoarthritis, right knee</p>
+          </div>
+
+          <!-- Billed Amount -->
+          <div>
+            <label for="lt-amount" class="form-label">Billed Amount ($)</label>
+            <input id="lt-amount" type="number" step="0.01" min="0.01" class="form-input" value="4500.00" placeholder="4500.00" />
+          </div>
+
+          <!-- Prior Auth toggle -->
+          <div class="flex flex-col justify-between">
+            <label class="form-label">Prior Authorization Present</label>
+            <div class="flex items-center gap-3 h-[38px]">
+              <div id="lt-auth-toggle" class="toggle-track" onclick="togglePriorAuth()" role="switch" aria-checked="false">
+                <div class="toggle-thumb"></div>
+              </div>
+              <span id="lt-auth-label" class="text-xs text-slate-400">Not Present → payload: <code class="text-slate-500">null</code></span>
+            </div>
+            <!-- Hidden auth number field, shown when toggled on -->
+            <input id="lt-auth-number" type="text" class="form-input mt-2 hidden"
+              placeholder="PA-2024-XXXXX" value="PA-2024-00001" />
+          </div>
+
+        </div>
+
+        <!-- Action row -->
+        <div class="flex items-center gap-3 mt-5 pt-4 border-t border-slate-800">
+          <button id="btn-live-scrub" onclick="runLiveScrub()"
+            class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-all duration-150 shadow-lg shadow-indigo-900/40 disabled:opacity-50 disabled:cursor-not-allowed">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+            </svg>
+            Run Live Scrub
+          </button>
+          <button onclick="clearLiveTester()"
+            class="text-sm text-slate-400 hover:text-white transition-colors px-4 py-2.5 rounded-xl hover:bg-slate-800">
+            Reset
+          </button>
+          <div id="live-scrub-spinner" class="spinner hidden ml-2"></div>
+          <!-- Payload preview badge -->
+          <button onclick="togglePayloadPreview()" id="btn-payload-preview"
+            class="ml-auto text-xs text-slate-500 hover:text-indigo-400 transition-colors flex items-center gap-1 font-medium">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/>
+            </svg>
+            Preview Payload
+          </button>
+        </div>
+
+        <!-- JSON payload preview (hidden by default) -->
+        <div id="payload-preview" class="hidden mt-3 bg-slate-950 border border-slate-700/60 rounded-xl p-4 animate-fade-in">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">JSON Payload</p>
+          <pre id="payload-json" class="text-xs text-indigo-300 font-mono whitespace-pre-wrap break-all"></pre>
+        </div>
+
+        <!-- Inline result panel -->
+        <div id="live-result-panel" class="collapsed">
+          <div id="live-result-inner" class="mt-4"></div>
+        </div>
+      </div>
+    </section>
 
     <!-- ── RESULTS TABLE ──────────────────────────────────────────────────── -->
     <section id="results-section" class="hidden animate-fade-in">
@@ -834,8 +1019,18 @@
         });
 
         if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.detail || `HTTP ${res.status}`);
+          const errBody = await res.json().catch(() => ({}));
+          const detail = errBody.detail;
+          let errMsg;
+          if (Array.isArray(detail)) {
+            errMsg = detail.map(e => {
+              const loc = Array.isArray(e.loc) ? e.loc.filter(l => l !== 'body').join(' → ') : '';
+              return loc ? `${loc}: ${e.msg}` : e.msg;
+            }).join('\n');
+          } else {
+            errMsg = detail || `HTTP ${res.status}`;
+          }
+          throw new Error(errMsg);
         }
 
         const result = await res.json();
@@ -899,6 +1094,253 @@
             <strong>Error:</strong> ${err.message}
           </div>`;
         resultPanel.classList.remove('hidden');
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        spinner.classList.add('hidden');
+      }
+    }
+
+    // ── Interactive Claim Tester ───────────────────────────────────────────
+
+    let _liveTesterOpen = true;
+    let _priorAuthOn    = false;
+    let _payloadPreviewOn = false;
+
+    function toggleLiveTester() {
+      _liveTesterOpen = !_liveTesterOpen;
+      const body    = document.getElementById('live-tester-body');
+      const chevron = document.getElementById('live-tester-chevron');
+      body.style.display = _liveTesterOpen ? '' : 'none';
+      chevron.style.transform = _liveTesterOpen ? '' : 'rotate(180deg)';
+    }
+
+    function togglePriorAuth() {
+      _priorAuthOn = !_priorAuthOn;
+      const track  = document.getElementById('lt-auth-toggle');
+      const label  = document.getElementById('lt-auth-label');
+      const field  = document.getElementById('lt-auth-number');
+      track.setAttribute('aria-checked', String(_priorAuthOn));
+      if (_priorAuthOn) {
+        track.classList.add('active');
+        label.innerHTML = 'Present → payload: <code class="text-indigo-300">"PA-..."</code>';
+        field.classList.remove('hidden');
+      } else {
+        track.classList.remove('active');
+        label.innerHTML = 'Not Present → payload: <code class="text-slate-500">null</code>';
+        field.classList.add('hidden');
+      }
+      if (_payloadPreviewOn) refreshPayloadPreview();
+    }
+
+    // Show / hide custom CPT input
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('lt-cpt').addEventListener('change', function() {
+        const customInput = document.getElementById('lt-cpt-custom');
+        if (this.value === 'custom') {
+          customInput.classList.remove('hidden');
+          customInput.focus();
+        } else {
+          customInput.classList.add('hidden');
+        }
+        if (_payloadPreviewOn) refreshPayloadPreview();
+      });
+
+      // Auto-refresh payload preview on field changes
+      ['lt-claim-id','lt-npi','lt-icd','lt-amount','lt-cpt-custom'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', () => { if (_payloadPreviewOn) refreshPayloadPreview(); });
+      });
+    });
+
+    function getLivePayload() {
+      const cptSelect = document.getElementById('lt-cpt');
+      const cptCode   = cptSelect.value === 'custom'
+        ? document.getElementById('lt-cpt-custom').value.trim()
+        : cptSelect.value;
+      const authNumber = _priorAuthOn
+        ? (document.getElementById('lt-auth-number').value.trim() || 'PA-2024-00001')
+        : null;
+      return {
+        claim_id:          document.getElementById('lt-claim-id').value.trim() || 'CLM-LIVE-901',
+        patient_id:        'PAT-1001',
+        payer_id:          'PAYER-001',
+        provider_npi:      document.getElementById('lt-npi').value.trim(),
+        procedure_codes:   [cptCode],
+        diagnosis_codes:   [document.getElementById('lt-icd').value.trim()],
+        billed_amount:     parseFloat(document.getElementById('lt-amount').value) || 4500.00,
+        prior_auth_number: authNumber,
+        service_date:      new Date().toISOString().split('T')[0],
+      };
+    }
+
+    function refreshPayloadPreview() {
+      document.getElementById('payload-json').textContent =
+        JSON.stringify(getLivePayload(), null, 2);
+    }
+
+    function togglePayloadPreview() {
+      _payloadPreviewOn = !_payloadPreviewOn;
+      const panel = document.getElementById('payload-preview');
+      const btn   = document.getElementById('btn-payload-preview');
+      if (_payloadPreviewOn) {
+        refreshPayloadPreview();
+        panel.classList.remove('hidden');
+        btn.classList.add('text-indigo-400');
+        btn.classList.remove('text-slate-500');
+      } else {
+        panel.classList.add('hidden');
+        btn.classList.remove('text-indigo-400');
+        btn.classList.add('text-slate-500');
+      }
+    }
+
+    function clearLiveTester() {
+      document.getElementById('lt-claim-id').value = 'CLM-LIVE-901';
+      document.getElementById('lt-npi').value      = '1234567893';
+      document.getElementById('lt-icd').value      = 'M17.11';
+      document.getElementById('lt-amount').value   = '4500.00';
+      document.getElementById('lt-cpt').value      = '27447';
+      document.getElementById('lt-cpt-custom').classList.add('hidden');
+      if (_priorAuthOn) togglePriorAuth(); // reset toggle
+      // Collapse result
+      const rp = document.getElementById('live-result-panel');
+      rp.classList.remove('expanded');
+      rp.classList.add('collapsed');
+      document.getElementById('live-result-inner').innerHTML = '';
+      if (_payloadPreviewOn) refreshPayloadPreview();
+    }
+
+    async function runLiveScrub() {
+      const btn     = document.getElementById('btn-live-scrub');
+      const spinner = document.getElementById('live-scrub-spinner');
+      const panel   = document.getElementById('live-result-panel');
+      const inner   = document.getElementById('live-result-inner');
+
+      btn.disabled = true;
+      spinner.classList.remove('hidden');
+
+      // Collapse result while loading
+      panel.classList.remove('expanded');
+      panel.classList.add('collapsed');
+
+      const payload = getLivePayload();
+      if (_payloadPreviewOn) refreshPayloadPreview();
+
+      try {
+        const res = await fetch(`${API}/claims/scrub`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          // FastAPI 422s return detail as an array of {loc, msg, type} objects
+          const detail = errBody.detail;
+          let errMsg;
+          if (Array.isArray(detail)) {
+            errMsg = detail.map(e => {
+              const loc = Array.isArray(e.loc) ? e.loc.filter(l => l !== 'body').join(' → ') : '';
+              return loc ? `${loc}: ${e.msg}` : e.msg;
+            }).join('\n');
+          } else {
+            errMsg = detail || `HTTP ${res.status}`;
+          }
+          throw new Error(errMsg);
+        }
+
+        const result = await res.json();
+
+        // ── Build result HTML ──
+        const statusColourMap = {
+          CLEAN:       'border-emerald-500/40 bg-emerald-500/5',
+          FLAGGED:     'border-amber-500/40 bg-amber-500/5',
+          FATAL_ERROR: 'border-red-500/40 bg-red-500/5',
+        };
+        const borderCls = statusColourMap[result.status] || 'border-slate-600';
+
+        const pct = Math.round((result.denial_risk_score || 0) * 100);
+        let riskColour = 'text-emerald-400';
+        if (pct >= 80) riskColour = 'text-red-400';
+        else if (pct >= 40) riskColour = 'text-amber-400';
+
+        const flagsHtml = result.flags && result.flags.length
+          ? result.flags.map(f =>
+              `<li class="flex items-start gap-2 text-xs text-slate-300">
+                <span class="text-red-400 mt-0.5 flex-shrink-0">•</span>${f}
+              </li>`).join('')
+          : '<li class="text-xs text-slate-500 italic">No issues detected</li>';
+
+        const carcHtml = result.suggested_carc_codes && result.suggested_carc_codes.length
+          ? result.suggested_carc_codes.map(c => {
+              const name = typeof c === 'string' ? c : (c.name || c);
+              const num  = name.replace('CO_', '');
+              return `<span class="carc-pill">CO-${num}</span>`;
+            }).join('')
+          : '<span class="text-slate-500 text-xs italic">None</span>';
+
+        inner.innerHTML = `
+          <div class="border rounded-xl p-5 space-y-4 ${borderCls}">
+            <!-- Header row -->
+            <div class="flex items-center justify-between flex-wrap gap-3">
+              <div class="flex items-center gap-3">
+                ${statusBadge(result.status)}
+                <span class="font-mono text-xs text-slate-400">${result.claim_id}</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <div class="text-center">
+                  <p class="text-xs text-slate-500">Denial Risk</p>
+                  <p class="text-2xl font-extrabold ${riskColour} leading-none">${pct}%</p>
+                </div>
+              </div>
+            </div>
+            <!-- Risk bar -->
+            ${riskBar(result.denial_risk_score || 0)}
+            <!-- CARC + Flags grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              <div>
+                <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Suggested CARC Codes</p>
+                <div class="flex flex-wrap gap-1">${carcHtml}</div>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Flags / Issues</p>
+                <ul class="space-y-1">${flagsHtml}</ul>
+              </div>
+            </div>
+            <!-- Billed amount echo -->
+            <div class="border-t border-slate-700/40 pt-3 flex items-center justify-between">
+              <span class="text-xs text-slate-500">Billed Amount</span>
+              <span class="text-sm font-bold text-slate-200">$${Number(result.billed_amount || payload.billed_amount).toLocaleString('en-US',{minimumFractionDigits:2})}</span>
+            </div>
+          </div>`;
+
+        // Expand panel with animation
+        panel.classList.remove('collapsed');
+        panel.classList.add('expanded');
+
+        // Also push into the main results table
+        renderResults([result], [{
+          claim_id:        payload.claim_id,
+          provider_npi:    payload.provider_npi,
+          patient_id:      payload.patient_id,
+          procedure_codes: payload.procedure_codes,
+        }]);
+
+        showToast(
+          `${result.claim_id} → ${result.status} · Risk ${pct}%`,
+          result.status === 'CLEAN' ? 'success' : 'error'
+        );
+        await loadMetrics();
+
+      } catch (err) {
+        inner.innerHTML = `
+          <div class="border border-red-500/30 bg-red-500/5 rounded-xl p-4">
+            <p class="text-sm font-semibold text-red-300 mb-1">Scrub Failed</p>
+            <p class="text-xs text-red-400">${err.message}</p>
+          </div>`;
+        panel.classList.remove('collapsed');
+        panel.classList.add('expanded');
         showToast(err.message, 'error');
       } finally {
         btn.disabled = false;
