@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClaimGuard RCM Engine — Live Dashboard</title>
+  <meta name="description" content="Real-time claim scrubbing and denial-risk prediction dashboard for Revenue Cycle Management." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            },
+          },
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui'],
+          },
+          animation: {
+            'fade-in': 'fadeIn 0.4s ease-out',
+            'slide-up': 'slideUp 0.35s ease-out',
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4,0,0.6,1) infinite',
+          },
+          keyframes: {
+            fadeIn:  { from: { opacity: '0' }, to: { opacity: '1' } },
+            slideUp: { from: { opacity: '0', transform: 'translateY(12px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+
+    /* Glassmorphism card */
+    .glass {
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    /* Gradient text */
+    .gradient-text {
+      background: linear-gradient(135deg, #818cf8 0%, #c7d2fe 50%, #a5b4fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Risk progress bar */
+    .risk-bar-track {
+      background: rgba(255,255,255,0.1);
+      border-radius: 9999px;
+      overflow: hidden;
+      height: 6px;
+    }
+    .risk-bar-fill {
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Table row hover */
+    .claim-row { transition: background 0.15s ease; }
+    .claim-row:hover { background: rgba(99,102,241,0.08); }
+
+    /* Spinner */
+    .spinner {
+      border: 3px solid rgba(255,255,255,0.15);
+      border-top-color: #818cf8;
+      border-radius: 50%;
+      width: 22px;
+      height: 22px;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Modal backdrop */
+    .modal-backdrop {
+      background: rgba(2, 6, 23, 0.75);
+      backdrop-filter: blur(4px);
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+
+    /* Tooltip */
+    .tooltip-wrap { position: relative; cursor: default; }
+    .tooltip-text {
+      visibility: hidden; opacity: 0;
+      position: absolute; bottom: 125%; left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b; color: #cbd5e1;
+      font-size: 0.7rem; padding: 6px 10px;
+      border-radius: 6px; white-space: nowrap;
+      border: 1px solid #334155;
+      transition: opacity 0.2s ease;
+      z-index: 50; pointer-events: none;
+    }
+    .tooltip-wrap:hover .tooltip-text { visibility: visible; opacity: 1; }
+
+    /* Flag pill */
+    .flag-pill {
+      display: inline-block;
+      background: rgba(239,68,68,0.15);
+      color: #fca5a5;
+      border: 1px solid rgba(239,68,68,0.25);
+      border-radius: 9999px;
+      font-size: 0.65rem;
+      padding: 1px 8px;
+      margin: 1px 2px;
+      white-space: nowrap;
+    }
+    .carc-pill {
+      display: inline-block;
+      background: rgba(234,179,8,0.12);
+      color: #fcd34d;
+      border: 1px solid rgba(234,179,8,0.22);
+      border-radius: 9999px;
+      font-size: 0.65rem;
+      padding: 1px 8px;
+      margin: 1px 2px;
+    }
+  </style>
+</head>
+
+<body class="min-h-full bg-slate-950 text-slate-200 antialiased">
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- HEADER                                                                -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <header class="sticky top-0 z-40 border-b border-slate-800/70 bg-slate-950/80 backdrop-blur-xl">
+    <div class="max-w-screen-2xl mx-auto px-6 py-3 flex items-center justify-between">
+
+      <!-- Logo + Title -->
+      <div class="flex items-center gap-3">
+        <!-- Shield icon -->
+        <div class="flex-shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-900/50">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-white">ClaimGuard <span class="gradient-text">RCM Engine</span></h1>
+          <p class="text-xs text-slate-500 -mt-0.5">Revenue Cycle Management · Claim Scrubber</p>
+        </div>
+      </div>
+
+      <!-- Right: Status badge + Links -->
+      <div class="flex items-center gap-4">
+        <a href="/docs" target="_blank"
+           class="text-xs text-slate-400 hover:text-indigo-400 transition-colors font-medium flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z"/>
+          </svg>
+          API Docs
+        </a>
+        <a href="/health" target="_blank"
+           class="text-xs text-slate-400 hover:text-indigo-400 transition-colors font-medium flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"/>
+          </svg>
+          Health
+        </a>
+        <!-- Live badge -->
+        <span class="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-semibold px-3 py-1 rounded-full">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          Live Microservice
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- MAIN CONTENT                                                          -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <main class="max-w-screen-2xl mx-auto px-6 py-8 space-y-8">
+
+    <!-- Section title -->
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-white tracking-tight">Operations Dashboard</h2>
+        <p class="text-sm text-slate-400 mt-0.5">Real-time claim scrubbing &amp; denial-risk analytics</p>
+      </div>
+      <!-- Last refreshed -->
+      <div class="text-right">
+        <p class="text-xs text-slate-500">Metrics last fetched</p>
+        <p id="last-refresh" class="text-xs text-slate-400 font-medium">—</p>
+      </div>
+    </div>
+
+    <!-- ── KPI CARDS ──────────────────────────────────────────────────────── -->
+    <section id="kpi-section" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+
+      <!-- Skeleton cards shown while loading -->
+      <div id="kpi-skeleton" class="contents">
+        <div class="glass rounded-2xl p-5 animate-pulse space-y-3" id="sk1">
+          <div class="h-3 w-24 bg-slate-700 rounded"></div>
+          <div class="h-8 w-20 bg-slate-700 rounded"></div>
+          <div class="h-2 w-32 bg-slate-800 rounded"></div>
+        </div>
+        <div class="glass rounded-2xl p-5 animate-pulse space-y-3" id="sk2">
+          <div class="h-3 w-28 bg-slate-700 rounded"></div>
+          <div class="h-8 w-24 bg-slate-700 rounded"></div>
+          <div class="h-2 w-32 bg-slate-800 rounded"></div>
+        </div>
+        <div class="glass rounded-2xl p-5 animate-pulse space-y-3" id="sk3">
+          <div class="h-3 w-24 bg-slate-700 rounded"></div>
+          <div class="h-8 w-20 bg-slate-700 rounded"></div>
+          <div class="h-2 w-32 bg-slate-800 rounded"></div>
+        </div>
+        <div class="glass rounded-2xl p-5 animate-pulse space-y-3" id="sk4">
+          <div class="h-3 w-20 bg-slate-700 rounded"></div>
+          <div class="h-8 w-16 bg-slate-700 rounded"></div>
+          <div class="h-2 w-36 bg-slate-800 rounded"></div>
+        </div>
+      </div>
+
+      <!-- Real KPI cards injected by JS -->
+      <div id="kpi-cards" class="contents hidden"></div>
+    </section>
+
+    <!-- ── ACTION CONTROLS ────────────────────────────────────────────────── -->
+    <section class="glass rounded-2xl p-5 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+      <div>
+        <h3 class="text-sm font-semibold text-white">Claim Scrubbing Controls</h3>
+        <p class="text-xs text-slate-400 mt-0.5">Submit pre-loaded CMS-1500 seed claims or test a single custom claim</p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <!-- Batch button -->
+        <button id="btn-batch"
+          onclick="scrubBatch()"
+          class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-all duration-150 shadow-lg shadow-indigo-900/40 disabled:opacity-50 disabled:cursor-not-allowed">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Scrub Pre-Loaded Claims
+        </button>
+        <!-- Single claim button -->
+        <button id="btn-single"
+          onclick="openSingleModal()"
+          class="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-all duration-150 shadow-md">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+          </svg>
+          Test Single Claim
+        </button>
+      </div>
+    </section>
+
+    <!-- ── BATCH STATUS BAR ───────────────────────────────────────────────── -->
+    <div id="batch-status" class="hidden glass rounded-2xl px-5 py-4 flex items-center gap-4 animate-slide-up">
+      <div id="batch-spinner" class="spinner hidden flex-shrink-0"></div>
+      <svg id="batch-ok-icon" class="w-5 h-5 text-emerald-400 flex-shrink-0 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <svg id="batch-err-icon" class="w-5 h-5 text-red-400 flex-shrink-0 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+      </svg>
+      <p id="batch-msg" class="text-sm text-slate-300 font-medium"></p>
+
+      <!-- Batch summary pills -->
+      <div id="batch-summary" class="ml-auto flex gap-2 hidden">
+        <span id="pill-clean" class="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold px-3 py-1 rounded-full"></span>
+        <span id="pill-flagged" class="bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-semibold px-3 py-1 rounded-full"></span>
+        <span id="pill-fatal" class="bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-semibold px-3 py-1 rounded-full"></span>
+      </div>
+    </div>
+
+    <!-- ── RESULTS TABLE ──────────────────────────────────────────────────── -->
+    <section id="results-section" class="hidden animate-fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold text-white">Scrubbing Results</h3>
+        <span id="results-count" class="text-xs text-slate-400 bg-slate-800 px-3 py-1 rounded-full font-medium"></span>
+      </div>
+
+      <!-- Table wrapper with horizontal scroll for narrow screens -->
+      <div class="glass rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-slate-700/60 text-left">
+                <th class="px-5 py-3.5 text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">Claim ID</th>
+                <th class="px-5 py-3.5 text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">Patient</th>
+                <th class="px-5 py-3.5 text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">Provider NPI</th>
+                <th class="px-5 py-3.5 text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">CPT Codes</th>
+                <th class="px-5 py-3.5 text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">Billed ($)</th>
+                <th class="px-5 py-3.5 text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">Status</th>
+                <th class="px-5 py-3.5 text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap min-w-[140px]">Denial Risk</th>
+                <th class="px-5 py-3.5 text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">CARC Codes / Flags</th>
+              </tr>
+            </thead>
+            <tbody id="results-tbody" class="divide-y divide-slate-800/60"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main><!-- /main -->
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- SINGLE CLAIM MODAL                                                    -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <div id="modal" class="fixed inset-0 z-50 hidden modal-backdrop flex items-center justify-center p-4">
+    <div class="relative bg-slate-900 border border-slate-700/60 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slide-up">
+
+      <!-- Modal header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700/60">
+        <div>
+          <h2 class="text-base font-bold text-white">Test Single Claim</h2>
+          <p class="text-xs text-slate-400 mt-0.5">Pre-filled with realistic CMS-1500 data — edit any field and submit</p>
+        </div>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white transition-colors p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Form -->
+      <form id="single-form" onsubmit="submitSingleClaim(event)" class="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        <!-- Prefill selector -->
+        <div class="sm:col-span-2">
+          <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">Quick Prefill</label>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" onclick="prefill('clean')"
+              class="text-xs bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 px-3 py-1.5 rounded-lg transition-colors font-medium">
+              ✅ Clean Claim
+            </button>
+            <button type="button" onclick="prefill('missing_auth')"
+              class="text-xs bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25 px-3 py-1.5 rounded-lg transition-colors font-medium">
+              ⚠️ Missing Prior Auth
+            </button>
+            <button type="button" onclick="prefill('bad_npi')"
+              class="text-xs bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 px-3 py-1.5 rounded-lg transition-colors font-medium">
+              🚨 Bad NPI
+            </button>
+            <button type="button" onclick="prefill('bad_dx')"
+              class="text-xs bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 px-3 py-1.5 rounded-lg transition-colors font-medium">
+              🚨 Invalid ICD-10
+            </button>
+          </div>
+        </div>
+
+        <div class="sm:col-span-2 border-t border-slate-800 pt-1"></div>
+
+        <!-- Fields -->
+        <div>
+          <label for="f-claim-id" class="form-label">Claim ID</label>
+          <input id="f-claim-id" name="claim_id" type="text" class="form-input" required placeholder="CLM-TEST-001" />
+        </div>
+        <div>
+          <label for="f-patient-id" class="form-label">Patient ID</label>
+          <input id="f-patient-id" name="patient_id" type="text" class="form-input" required placeholder="PAT-99001" />
+        </div>
+        <div>
+          <label for="f-payer-id" class="form-label">Payer ID</label>
+          <input id="f-payer-id" name="payer_id" type="text" class="form-input" required placeholder="00192" />
+        </div>
+        <div>
+          <label for="f-npi" class="form-label">Provider NPI <span class="text-slate-500 font-normal">(10 digits)</span></label>
+          <input id="f-npi" name="provider_npi" type="text" class="form-input" required maxlength="10" placeholder="1234567893" />
+        </div>
+        <div>
+          <label for="f-dx" class="form-label">Diagnosis Codes <span class="text-slate-500 font-normal">(comma-separated)</span></label>
+          <input id="f-dx" name="diagnosis_codes" type="text" class="form-input" required placeholder="M17.11, Z96.641" />
+        </div>
+        <div>
+          <label for="f-cpt" class="form-label">Procedure (CPT) Codes <span class="text-slate-500 font-normal">(comma-separated)</span></label>
+          <input id="f-cpt" name="procedure_codes" type="text" class="form-input" required placeholder="27447, 99213" />
+        </div>
+        <div>
+          <label for="f-amount" class="form-label">Billed Amount ($)</label>
+          <input id="f-amount" name="billed_amount" type="number" step="0.01" min="0.01" class="form-input" required placeholder="15750.00" />
+        </div>
+        <div>
+          <label for="f-auth" class="form-label">Prior Auth Number <span class="text-slate-500 font-normal">(optional)</span></label>
+          <input id="f-auth" name="prior_auth_number" type="text" class="form-input" placeholder="AUTH-2024-88421" />
+        </div>
+        <div>
+          <label for="f-date" class="form-label">Service Date</label>
+          <input id="f-date" name="service_date" type="date" class="form-input" required />
+        </div>
+
+        <!-- Submit row -->
+        <div class="sm:col-span-2 flex items-center gap-3 pt-2">
+          <button type="submit" id="btn-submit-single"
+            class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-900/40">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Scrub This Claim
+          </button>
+          <button type="button" onclick="closeModal()"
+            class="text-sm text-slate-400 hover:text-white transition-colors px-4 py-2.5 rounded-xl hover:bg-slate-800">
+            Cancel
+          </button>
+          <div id="modal-spinner" class="spinner hidden ml-auto"></div>
+        </div>
+      </form>
+
+      <!-- Single claim result panel -->
+      <div id="modal-result" class="hidden px-6 pb-6 animate-slide-up"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- TOAST NOTIFICATION                                                    -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <div id="toast"
+       class="fixed bottom-6 right-6 z-50 hidden bg-slate-800 border border-slate-700 text-slate-200 text-sm font-medium px-5 py-3 rounded-xl shadow-2xl animate-slide-up max-w-xs">
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- INLINE STYLES for form elements (simpler than Tailwind arbitrary)    -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <style>
+    .form-label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    .form-input {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 9px 14px;
+      font-size: 0.875rem;
+      color: #e2e8f0;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .form-input:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+    .form-input::placeholder { color: #475569; }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
+  </style>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- JAVASCRIPT                                                            -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <script>
+    'use strict';
+
+    // ── Constants ──────────────────────────────────────────────────────────
+    const API = '/api/v1';
+
+    // ── Prefill datasets ───────────────────────────────────────────────────
+    const PREFILLS = {
+      clean: {
+        claim_id: 'CLM-DEMO-CLEAN',
+        patient_id: 'PAT-10042',
+        payer_id: '00192',
+        provider_npi: '1234567893',
+        diagnosis_codes: 'M17.11, Z96.641',
+        procedure_codes: '27447, 99213',
+        billed_amount: '18250.00',
+        prior_auth_number: 'AUTH-2024-88421',
+        service_date: '2024-03-15',
+      },
+      missing_auth: {
+        claim_id: 'CLM-DEMO-NOAUTH',
+        patient_id: 'PAT-33610',
+        payer_id: '00192',
+        provider_npi: '1234567893',
+        diagnosis_codes: 'M17.12, Z96.651',
+        procedure_codes: '27447',
+        billed_amount: '22100.00',
+        prior_auth_number: '',
+        service_date: '2024-04-18',
+      },
+      bad_npi: {
+        claim_id: 'CLM-DEMO-BADNPI',
+        patient_id: 'PAT-55123',
+        payer_id: '00192',
+        provider_npi: '1234567890',
+        diagnosis_codes: 'J06.9, R05.9',
+        procedure_codes: '99213',
+        billed_amount: '275.00',
+        prior_auth_number: '',
+        service_date: '2024-05-14',
+      },
+      bad_dx: {
+        claim_id: 'CLM-DEMO-BADDX',
+        patient_id: 'PAT-66789',
+        payer_id: '00302',
+        provider_npi: '1679574781',
+        diagnosis_codes: 'XYZ999, INVALID',
+        procedure_codes: '99213',
+        billed_amount: '220.00',
+        prior_auth_number: '',
+        service_date: '2024-05-21',
+      },
+    };
+
+    // ── Toast helper ───────────────────────────────────────────────────────
+    let _toastTimer = null;
+    function showToast(msg, type = 'info') {
+      const el = document.getElementById('toast');
+      const colours = {
+        info:    'border-slate-600 text-slate-200',
+        success: 'border-emerald-600 text-emerald-200',
+        error:   'border-red-600 text-red-300',
+      };
+      el.className = `fixed bottom-6 right-6 z-50 bg-slate-800 border text-sm font-medium px-5 py-3 rounded-xl shadow-2xl max-w-xs animate-slide-up ${colours[type] || colours.info}`;
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(() => el.classList.add('hidden'), 4000);
+    }
+
+    // ── Status badge builder ───────────────────────────────────────────────
+    function statusBadge(status) {
+      const map = {
+        CLEAN:       ['bg-emerald-500/15 text-emerald-300 border-emerald-500/30', '✓ CLEAN'],
+        FLAGGED:     ['bg-amber-500/15 text-amber-300 border-amber-500/30',       '⚠ FLAGGED'],
+        FATAL_ERROR: ['bg-red-500/15 text-red-300 border-red-500/30',             '✕ FATAL'],
+      };
+      const [cls, label] = map[status] || ['bg-slate-500/15 text-slate-300 border-slate-500/30', status];
+      return `<span class="inline-flex items-center border text-xs font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap ${cls}">${label}</span>`;
+    }
+
+    // ── Risk bar builder ───────────────────────────────────────────────────
+    function riskBar(score) {
+      const pct = Math.round(score * 100);
+      let colour = 'bg-emerald-500';
+      if (pct >= 80) colour = 'bg-red-500';
+      else if (pct >= 40) colour = 'bg-amber-500';
+      return `
+        <div class="flex items-center gap-2">
+          <div class="risk-bar-track flex-1">
+            <div class="risk-bar-fill ${colour}" style="width:${pct}%"></div>
+          </div>
+          <span class="text-xs font-semibold text-slate-300 w-8 text-right">${pct}%</span>
+        </div>`;
+    }
+
+    // ── CARC + flags builder ───────────────────────────────────────────────
+    function flagsCell(result) {
+      let html = '';
+      // CARC codes first
+      if (result.suggested_carc_codes && result.suggested_carc_codes.length) {
+        const codes = result.suggested_carc_codes.map(c => {
+          const name = typeof c === 'string' ? c : c.name || c;
+          const num = name.replace('CO_', '');
+          return `<span class="carc-pill tooltip-wrap">CO-${num}<span class="tooltip-text">${typeof c === 'object' && c.value ? c.value : name}</span></span>`;
+        });
+        html += codes.join('');
+      }
+      // Flag messages
+      if (result.flags && result.flags.length) {
+        result.flags.forEach(f => {
+          const short = f.length > 50 ? f.slice(0, 48) + '…' : f;
+          html += `<span class="flag-pill tooltip-wrap">${short}<span class="tooltip-text" style="max-width:280px;white-space:normal;text-align:left">${f}</span></span>`;
+        });
+      }
+      return html || '<span class="text-slate-600 text-xs">—</span>';
+    }
+
+    // ── Build a table row ──────────────────────────────────────────────────
+    function buildRow(r, claim) {
+      const cpts = claim && claim.procedure_codes
+        ? claim.procedure_codes.join(', ')
+        : '—';
+      const npi = claim ? claim.provider_npi : '—';
+      const patient = claim ? claim.patient_id : '—';
+
+      return `
+        <tr class="claim-row">
+          <td class="px-5 py-3.5 font-mono text-xs text-slate-300 whitespace-nowrap">${r.claim_id}</td>
+          <td class="px-5 py-3.5 text-xs text-slate-400 whitespace-nowrap">${patient}</td>
+          <td class="px-5 py-3.5 font-mono text-xs text-slate-400 whitespace-nowrap">${npi}</td>
+          <td class="px-5 py-3.5 text-xs text-slate-300 whitespace-nowrap">${cpts}</td>
+          <td class="px-5 py-3.5 text-xs font-semibold text-slate-200 whitespace-nowrap">
+            $${Number(r.billed_amount).toLocaleString('en-US', {minimumFractionDigits:2})}
+          </td>
+          <td class="px-5 py-3.5 whitespace-nowrap">${statusBadge(r.status)}</td>
+          <td class="px-5 py-3.5 min-w-[140px]">${riskBar(r.denial_risk_score)}</td>
+          <td class="px-5 py-3.5 text-xs max-w-xs">${flagsCell(r)}</td>
+        </tr>`;
+    }
+
+    // ── Render results table ───────────────────────────────────────────────
+    function renderResults(results, claims) {
+      const tbody = document.getElementById('results-tbody');
+      const claimMap = {};
+      if (claims) claims.forEach(c => { claimMap[c.claim_id] = c; });
+      tbody.innerHTML = results.map(r => buildRow(r, claimMap[r.claim_id])).join('');
+
+      document.getElementById('results-count').textContent = `${results.length} claim${results.length !== 1 ? 's' : ''}`;
+      document.getElementById('results-section').classList.remove('hidden');
+
+      // Animate risk bars in after paint
+      requestAnimationFrame(() => {
+        document.querySelectorAll('.risk-bar-fill').forEach(el => {
+          const w = el.style.width;
+          el.style.width = '0%';
+          requestAnimationFrame(() => { el.style.width = w; });
+        });
+      });
+    }
+
+    // ── KPI card builder ───────────────────────────────────────────────────
+    function buildKpiCard({ icon, label, value, sub, accentClass }) {
+      return `
+        <div class="glass rounded-2xl p-5 flex flex-col gap-3 hover:border-indigo-500/30 transition-colors duration-200">
+          <div class="flex items-center justify-between">
+            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">${label}</p>
+            <div class="w-8 h-8 rounded-lg ${accentClass} flex items-center justify-center text-sm">${icon}</div>
+          </div>
+          <p class="text-3xl font-extrabold text-white leading-none">${value}</p>
+          <p class="text-xs text-slate-500">${sub}</p>
+        </div>`;
+    }
+
+    // ── Load KPI metrics ───────────────────────────────────────────────────
+    async function loadMetrics() {
+      try {
+        const res = await fetch(`${API}/analytics/metrics`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const d = await res.json();
+
+        const sb = d.status_breakdown || {};
+        const ba = d.billed_amount_summary || {};
+        const carc = d.carc_code_distribution || {};
+
+        // Top CARC code
+        let topCarcKey = '—', topCarcCount = 0;
+        Object.entries(carc).forEach(([k, v]) => {
+          if (v.count > topCarcCount) { topCarcKey = k; topCarcCount = v.count; }
+        });
+        const topCarcLabel = topCarcKey !== '—' ? `CO-${topCarcKey.replace('CO_','')}` : '—';
+
+        const cards = [
+          {
+            icon: '📊',
+            label: 'Clean Claim Rate',
+            value: `${sb.clean_claim_rate_pct ?? 0}%`,
+            sub: `${sb.clean_claims_count ?? 0} clean of ${d.claims_evaluated ?? 0} evaluated`,
+            accentClass: 'bg-emerald-500/15 text-emerald-300',
+          },
+          {
+            icon: '💵',
+            label: 'Total Billed',
+            value: `$${Number(ba.total_billed_usd ?? 0).toLocaleString('en-US')}`,
+            sub: `Across ${d.claims_evaluated ?? 0} submitted claims`,
+            accentClass: 'bg-indigo-500/15 text-indigo-300',
+          },
+          {
+            icon: '⚠️',
+            label: 'At-Risk Revenue',
+            value: `$${Number(ba.at_risk_billed_usd ?? 0).toLocaleString('en-US')}`,
+            sub: `${ba.at_risk_pct ?? 0}% of total billed at denial risk`,
+            accentClass: 'bg-amber-500/15 text-amber-300',
+          },
+          {
+            icon: '🏷️',
+            label: 'Top Denial Code',
+            value: topCarcLabel,
+            sub: `Triggered ${topCarcCount} time${topCarcCount !== 1 ? 's' : ''} across claims`,
+            accentClass: 'bg-red-500/15 text-red-300',
+          },
+        ];
+
+        document.getElementById('kpi-skeleton').classList.add('hidden');
+        const container = document.getElementById('kpi-cards');
+        container.innerHTML = cards.map(buildKpiCard).join('');
+        container.classList.remove('hidden');
+
+        document.getElementById('last-refresh').textContent =
+          new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      } catch (err) {
+        console.error('Metrics load failed:', err);
+        showToast('Could not load KPI metrics — is the server running?', 'error');
+      }
+    }
+
+    // ── Batch scrub ────────────────────────────────────────────────────────
+    async function scrubBatch() {
+      const btn = document.getElementById('btn-batch');
+      const statusBar = document.getElementById('batch-status');
+      const spinner = document.getElementById('batch-spinner');
+      const okIcon = document.getElementById('batch-ok-icon');
+      const errIcon = document.getElementById('batch-err-icon');
+      const msg = document.getElementById('batch-msg');
+      const summary = document.getElementById('batch-summary');
+
+      // Reset state
+      btn.disabled = true;
+      statusBar.classList.remove('hidden');
+      spinner.classList.remove('hidden');
+      okIcon.classList.add('hidden');
+      errIcon.classList.add('hidden');
+      summary.classList.add('hidden');
+      msg.textContent = 'Fetching seed claims…';
+      document.getElementById('results-section').classList.add('hidden');
+
+      try {
+        // Step 1: load seed claims
+        const seedRes = await fetch(`${API}/claims/seed-claims`);
+        if (!seedRes.ok) throw new Error(`Seed load failed: HTTP ${seedRes.status}`);
+        const seedClaims = await seedRes.json();
+
+        msg.textContent = `Scrubbing ${seedClaims.length} pre-loaded claims…`;
+
+        // Step 2: batch scrub
+        const batchRes = await fetch(`${API}/claims/scrub/batch`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(seedClaims),
+        });
+        if (!batchRes.ok) {
+          const errBody = await batchRes.json().catch(() => ({}));
+          throw new Error(errBody.detail || `Batch scrub failed: HTTP ${batchRes.status}`);
+        }
+        const batch = await batchRes.json();
+
+        // Success UI
+        spinner.classList.add('hidden');
+        okIcon.classList.remove('hidden');
+        msg.textContent = `Scrubbed ${batch.total_claims} claims — Clean rate: ${(batch.clean_claim_rate * 100).toFixed(1)}%`;
+
+        // Summary pills
+        const clean   = batch.results.filter(r => r.status === 'CLEAN').length;
+        const flagged = batch.results.filter(r => r.status === 'FLAGGED').length;
+        const fatal   = batch.results.filter(r => r.status === 'FATAL_ERROR').length;
+        document.getElementById('pill-clean').textContent   = `✓ ${clean} Clean`;
+        document.getElementById('pill-flagged').textContent = `⚠ ${flagged} Flagged`;
+        document.getElementById('pill-fatal').textContent   = `✕ ${fatal} Fatal`;
+        summary.classList.remove('hidden');
+
+        renderResults(batch.results, seedClaims);
+        showToast(`Batch complete — ${batch.total_claims} claims processed`, 'success');
+
+        // Refresh KPIs
+        await loadMetrics();
+
+      } catch (err) {
+        spinner.classList.add('hidden');
+        errIcon.classList.remove('hidden');
+        msg.textContent = `Error: ${err.message}`;
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ── Modal helpers ──────────────────────────────────────────────────────
+    function openSingleModal() {
+      document.getElementById('modal').classList.remove('hidden');
+      document.getElementById('modal-result').classList.add('hidden');
+      document.getElementById('modal-result').innerHTML = '';
+      // Default to today's date
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('f-date').value = today;
+    }
+
+    function closeModal() {
+      document.getElementById('modal').classList.add('hidden');
+    }
+
+    // Close modal on backdrop click
+    document.getElementById('modal').addEventListener('click', e => {
+      if (e.target === document.getElementById('modal')) closeModal();
+    });
+
+    // ── Prefill form ───────────────────────────────────────────────────────
+    function prefill(type) {
+      const data = PREFILLS[type];
+      if (!data) return;
+      document.getElementById('f-claim-id').value  = data.claim_id;
+      document.getElementById('f-patient-id').value = data.patient_id;
+      document.getElementById('f-payer-id').value  = data.payer_id;
+      document.getElementById('f-npi').value        = data.provider_npi;
+      document.getElementById('f-dx').value         = data.diagnosis_codes;
+      document.getElementById('f-cpt').value        = data.procedure_codes;
+      document.getElementById('f-amount').value     = data.billed_amount;
+      document.getElementById('f-auth').value       = data.prior_auth_number;
+      document.getElementById('f-date').value       = data.service_date;
+    }
+
+    // ── Submit single claim ────────────────────────────────────────────────
+    async function submitSingleClaim(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-single');
+      const spinner = document.getElementById('modal-spinner');
+      const resultPanel = document.getElementById('modal-result');
+
+      btn.disabled = true;
+      spinner.classList.remove('hidden');
+      resultPanel.classList.add('hidden');
+
+      const payload = {
+        claim_id:       document.getElementById('f-claim-id').value.trim(),
+        patient_id:     document.getElementById('f-patient-id').value.trim(),
+        payer_id:       document.getElementById('f-payer-id').value.trim(),
+        provider_npi:   document.getElementById('f-npi').value.trim(),
+        diagnosis_codes: document.getElementById('f-dx').value.split(',').map(s => s.trim()).filter(Boolean),
+        procedure_codes: document.getElementById('f-cpt').value.split(',').map(s => s.trim()).filter(Boolean),
+        billed_amount:  parseFloat(document.getElementById('f-amount').value),
+        prior_auth_number: document.getElementById('f-auth').value.trim() || null,
+        service_date:   document.getElementById('f-date').value,
+      };
+
+      try {
+        const res = await fetch(`${API}/claims/scrub`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+
+        const result = await res.json();
+
+        // Render inline result
+        const statusColour = {
+          CLEAN:       'border-emerald-500/30 bg-emerald-500/5',
+          FLAGGED:     'border-amber-500/30 bg-amber-500/5',
+          FATAL_ERROR: 'border-red-500/30 bg-red-500/5',
+        }[result.status] || 'border-slate-600';
+
+        let flagsHtml = result.flags && result.flags.length
+          ? result.flags.map(f => `<li class="flex items-start gap-2 text-xs text-slate-300"><span class="text-red-400 mt-0.5 flex-shrink-0">•</span>${f}</li>`).join('')
+          : '<li class="text-xs text-slate-500">No issues detected</li>';
+
+        let carcHtml = result.suggested_carc_codes && result.suggested_carc_codes.length
+          ? result.suggested_carc_codes.map(c => {
+              const name = typeof c === 'string' ? c : (c.name || c);
+              const num = name.replace('CO_', '');
+              return `<span class="carc-pill">CO-${num}</span>`;
+            }).join('')
+          : '<span class="text-slate-500 text-xs">None</span>';
+
+        const pct = Math.round(result.denial_risk_score * 100);
+        let riskColour = 'text-emerald-400';
+        if (pct >= 80) riskColour = 'text-red-400';
+        else if (pct >= 40) riskColour = 'text-amber-400';
+
+        resultPanel.innerHTML = `
+          <div class="border rounded-xl p-4 space-y-4 ${statusColour}">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <div class="flex items-center gap-3">
+                ${statusBadge(result.status)}
+                <span class="text-xs text-slate-400">${result.claim_id}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-slate-400">Denial Risk:</span>
+                <span class="text-sm font-bold ${riskColour}">${pct}%</span>
+              </div>
+            </div>
+            ${riskBar(result.denial_risk_score)}
+            <div>
+              <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Triggered CARC Codes</p>
+              <div>${carcHtml}</div>
+            </div>
+            <div>
+              <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Flags</p>
+              <ul class="space-y-1">${flagsHtml}</ul>
+            </div>
+          </div>`;
+
+        resultPanel.classList.remove('hidden');
+        showToast(`Claim ${result.claim_id} → ${result.status}`, result.status === 'CLEAN' ? 'success' : 'error');
+
+        // Also add to results table
+        renderResults([result], [payload]);
+
+      } catch (err) {
+        resultPanel.innerHTML = `
+          <div class="border border-red-500/30 bg-red-500/5 rounded-xl p-4 text-sm text-red-300">
+            <strong>Error:</strong> ${err.message}
+          </div>`;
+        resultPanel.classList.remove('hidden');
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        spinner.classList.add('hidden');
+      }
+    }
+
+    // ── Keyboard: Escape closes modal ──────────────────────────────────────
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeModal();
+    });
+
+    // ── Bootstrap ─────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+      loadMetrics();
+    });
+  </script>
+
+</body>
+</html>

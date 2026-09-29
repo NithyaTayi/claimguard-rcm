@@ -1,0 +1,74 @@
+[
+  {
+    "_comment": "CLEAN CLAIM #1 — Total knee arthroplasty with valid prior auth, valid NPI (Luhn-valid), clean ICD-10",
+    "claim_id": "CLM-2024-0001",
+    "patient_id": "PAT-10042",
+    "payer_id": "00192",
+    "provider_npi": "1234567893",
+    "diagnosis_codes": ["M17.11", "Z96.641"],
+    "procedure_codes": ["27447", "99213"],
+    "billed_amount": 18250.00,
+    "prior_auth_number": "AUTH-2024-88421",
+    "service_date": "2024-03-15"
+  },
+  {
+    "_comment": "CLEAN CLAIM #2 — Office visit E&M with valid diagnosis, no auth-required CPT, valid NPI",
+    "claim_id": "CLM-2024-0002",
+    "patient_id": "PAT-20817",
+    "payer_id": "00302",
+    "provider_npi": "1679574781",
+    "diagnosis_codes": ["J06.9", "R05.9"],
+    "procedure_codes": ["99213"],
+    "billed_amount": 185.00,
+    "prior_auth_number": null,
+    "service_date": "2024-04-02"
+  },
+  {
+    "_comment": "FLAGGED CLAIM #3 — Missing prior auth for CPT 27447 (total knee arthroplasty), valid NPI",
+    "claim_id": "CLM-2024-0003",
+    "patient_id": "PAT-33610",
+    "payer_id": "00192",
+    "provider_npi": "1234567893",
+    "diagnosis_codes": ["M17.12", "Z96.651"],
+    "procedure_codes": ["27447"],
+    "billed_amount": 22100.00,
+    "prior_auth_number": null,
+    "service_date": "2024-04-18"
+  },
+  {
+    "_comment": "FLAGGED CLAIM #4 — Missing prior auth for CPT 43239 (EGD with biopsy), valid NPI",
+    "claim_id": "CLM-2024-0004",
+    "patient_id": "PAT-44901",
+    "payer_id": "00512",
+    "provider_npi": "1679574781",
+    "diagnosis_codes": ["K21.0", "K57.30"],
+    "procedure_codes": ["43239"],
+    "billed_amount": 4800.00,
+    "prior_auth_number": null,
+    "service_date": "2024-05-07"
+  },
+  {
+    "_comment": "FATAL_ERROR CLAIM #5 — Invalid NPI (bad Luhn checksum), malformed ICD-10 codes",
+    "claim_id": "CLM-2024-0005",
+    "patient_id": "PAT-55123",
+    "payer_id": "00192",
+    "provider_npi": "1234567890",
+    "diagnosis_codes": ["XYZ999", "1234AB"],
+    "procedure_codes": ["99214"],
+    "billed_amount": 275.00,
+    "prior_auth_number": null,
+    "service_date": "2024-05-14"
+  },
+  {
+    "_comment": "FATAL_ERROR CLAIM #6 — NPI starts with '3' (invalid type indicator) and no valid ICD-10 diagnosis",
+    "claim_id": "CLM-2024-0006",
+    "patient_id": "PAT-66789",
+    "payer_id": "00302",
+    "provider_npi": "3456789012",
+    "diagnosis_codes": ["INVALID", "00000"],
+    "procedure_codes": ["99213"],
+    "billed_amount": 220.00,
+    "prior_auth_number": null,
+    "service_date": "2024-05-21"
+  }
+]
